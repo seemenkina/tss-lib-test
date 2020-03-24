@@ -158,7 +158,7 @@ func SaveCertificates(cert []byte, name string) {
 		if err != nil {
 			common.Logger.Fatalf("unable to write to certificate file %s", certFileName)
 		}
-		common.Logger.Infof("Saved a certificate file for CA %s: ", name)
+		common.Logger.Infof("Saved a certificate file for CA %s ", name)
 	} else {
 		common.Logger.Infof("Certificate file already exists for CA %s; not re-creating: %s", name, certFileName)
 	}
@@ -181,7 +181,7 @@ func LoadCertificate(name string) *x509.Certificate {
 		return nil
 	}
 
-	block, _ := pem.Decode([]byte(certPEM))
+	block, _ := pem.Decode(certPEM)
 	if block == nil {
 		fmt.Printf("failed to parse certificate PEM")
 		return nil
