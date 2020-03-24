@@ -1,44 +1,43 @@
 package main
 
 import (
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/tss-lib-test/cert"
+	"github.com/tss-lib-test/utils"
 )
 
 func main() {
 
-	pks := cert.PrivateKeyCert{}
+	pks := cert.GenerateKey()
 
-	pks.GenerateKey()
+	_, callerFileName, _, _ := runtime.Caller(0)
+	srcDirName := filepath.Dir(callerFileName)
+	certDirName := fmt.Sprintf("%s/test_data/cert", srcDirName)
 
-	RootCert, RootCertPEM, err := cert.GenRootCA(pks)
-	if err != nil {
-		fmt.Printf("%s\n", err)
+	if ok, err := utils.IsEmptyDir(certDirName); err == nil && ok == true {
+		rootCert, rootCertPEM, err := cert.GenRootCA(pks)
+		if err != nil {
+			fmt.Printf("%s\n", err)
+		}
+
+		interCert, certPEM, err := cert.GenerateCA(rootCert, pks)
+		if err != nil {
+			fmt.Printf("%s\n", err)
+		}
+
+		utils.SaveCertificates(rootCertPEM, strings.ReplaceAll(rootCert.Subject.CommonName, " ", "_"))
+		utils.SaveCertificates(certPEM, strings.ReplaceAll(interCert.Subject.CommonName, " ", "_"))
+
+		cert.Verify(rootCert, interCert)
+	} else {
+		rootCert := utils.LoadCertificate("Root_CA")
+		interCert := utils.LoadCertificate("Intermediate_CA")
+
+		cert.Verify(rootCert, interCert)
 	}
 
-	_ = ioutil.WriteFile("test_data/cert/rootCert.pem", RootCertPEM, 0777)
-	fmt.Println("certificate saved to rootCert.pem")
-
-	Cert, CertPEM, err := cert.GenerateCA(RootCert, pks)
-	if err != nil {
-		fmt.Printf("%s\n", err)
-	}
-
-	_ = ioutil.WriteFile("test_data/cert/cert.pem", CertPEM, 0777)
-	fmt.Println("certificate saved to cert_util.pem")
-
-	roots := x509.NewCertPool()
-	roots.AddCert(RootCert)
-
-	opts := x509.VerifyOptions{
-		Roots: roots,
-	}
-
-	if _, err := Cert.Verify(opts); err != nil {
-		fmt.Println("failed to verify certificate: " + err.Error())
-	}
-	fmt.Println("Success Verify certificate")
 }

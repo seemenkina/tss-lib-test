@@ -26,15 +26,17 @@ type ecdsaSignature struct {
 	R, S *big.Int
 }
 
-func (p *PrivateKeyCert) GenerateKey() {
+func GenerateKey() PrivateKeyCert {
 	key := keygen.GenerateKeys()
 
+	pks := PrivateKeyCert{}
 	ecdsaPk := ecdsa.PublicKey{
 		Curve: elliptic.P256(),
 		X:     key.ECDSAPub.X(),
 		Y:     key.ECDSAPub.Y(),
 	}
-	p.pk = &ecdsaPk
+	pks.pk = &ecdsaPk
+	return pks
 }
 
 func (p *PrivateKeyCert) Public() crypto.PublicKey {
@@ -116,4 +118,18 @@ func GenerateCA(RootCA *x509.Certificate, keyRoot PrivateKeyCert) (*x509.Certifi
 	}
 
 	return generateCA(&caTemp, RootCA, &ecdsaKey.PublicKey, &keyRoot)
+}
+
+func Verify(rootCert, interCert *x509.Certificate) {
+	roots := x509.NewCertPool()
+	roots.AddCert(rootCert)
+
+	opts := x509.VerifyOptions{
+		Roots: roots,
+	}
+
+	if _, err := interCert.Verify(opts); err != nil {
+		fmt.Println("failed to verify certificate: " + err.Error())
+	}
+	fmt.Println("Success Verify certificate")
 }

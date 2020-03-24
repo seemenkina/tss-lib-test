@@ -21,7 +21,13 @@ func GenerateKeys() keygen.LocalPartySaveData {
 	threshold := utils.TestThreshold
 	var output keygen.LocalPartySaveData
 
-	pIDs := tss.GenerateTestPartyIDs(utils.TestParticipants)
+	fixtures, pIDs, err := utils.LoadKeygenTest(utils.TestParticipants)
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
+		pIDs = tss.GenerateTestPartyIDs(utils.TestParticipants)
+	}
+
+	// pIDs := tss.GenerateTestPartyIDs(utils.TestParticipants)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	parties := make([]*keygen.LocalParty, 0, len(pIDs))
 
@@ -37,7 +43,12 @@ func GenerateKeys() keygen.LocalPartySaveData {
 	for i := 0; i < len(pIDs); i++ {
 		var P *keygen.LocalParty
 		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), threshold)
-		P = keygen.NewLocalParty(params, outCh, endCh).(*keygen.LocalParty)
+		if i < len(fixtures) {
+			P = keygen.NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*keygen.LocalParty)
+		} else {
+			P = keygen.NewLocalParty(params, outCh, endCh).(*keygen.LocalParty)
+		}
+		// P = keygen.NewLocalParty(params, outCh, endCh).(*keygen.LocalParty)
 		parties = append(parties, P)
 		go func(P *keygen.LocalParty) {
 			if err := P.Start(); err != nil {

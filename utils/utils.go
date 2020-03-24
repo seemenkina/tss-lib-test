@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -24,7 +26,9 @@ const (
 
 const (
 	testFixtureDirFormat  = "%s/../test_data/ecdsa_data"
+	TestCertDirFormat     = "%s/../test_data/cert"
 	testFixtureFileFormat = "keygen_data_%d.json"
+	testCertFileFormat    = "certificate_%s.pem"
 )
 
 func SetUp(level string) {
@@ -38,6 +42,13 @@ func makeTestFixtureFilePath(partyIndex int) string {
 	srcDirName := filepath.Dir(callerFileName)
 	fixtureDirName := fmt.Sprintf(testFixtureDirFormat, srcDirName)
 	return fmt.Sprintf("%s/"+testFixtureFileFormat, fixtureDirName, partyIndex)
+}
+
+func makeTestCertFilePath(name string) string {
+	_, callerFileName, _, _ := runtime.Caller(0)
+	srcDirName := filepath.Dir(callerFileName)
+	certDirName := fmt.Sprintf(TestCertDirFormat, srcDirName)
+	return fmt.Sprintf("%s/"+testCertFileFormat, certDirName, name)
 }
 
 func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData) {
@@ -101,4 +112,84 @@ func LoadData(qty, fixtureCount int) ([]keygen.LocalPartySaveData, tss.SortedPar
 	sortedPIDs := tss.SortPartyIDs(partyIDs)
 	sort.Slice(keys, func(i, j int) bool { return keys[i].ShareID.Cmp(keys[j].ShareID) == -1 })
 	return keys, sortedPIDs, nil
+}
+
+func LoadKeygenTest(qty int, optionalStart ...int) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
+	keys := make([]keygen.LocalPartySaveData, 0, qty)
+	start := 0
+	if 0 < len(optionalStart) {
+		start = optionalStart[0]
+	}
+	for i := start; i < qty; i++ {
+		fixtureFilePath := makeTestFixtureFilePath(i)
+		bz, err := ioutil.ReadFile(fixtureFilePath)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err,
+				"could not open the test fixture for party %d in the expected location: %s. run keygen tests first.",
+				i, fixtureFilePath)
+		}
+		var key keygen.LocalPartySaveData
+		if err = json.Unmarshal(bz, &key); err != nil {
+			return nil, nil, errors.Wrapf(err,
+				"could not unmarshal fixture data for party %d located at: %s",
+				i, fixtureFilePath)
+		}
+		keys = append(keys, key)
+	}
+	partyIDs := make(tss.UnSortedPartyIDs, len(keys))
+	for i, key := range keys {
+		pMoniker := fmt.Sprintf("%d", i+start+1)
+		partyIDs[i] = tss.NewPartyID(pMoniker, pMoniker, key.ShareID)
+	}
+	sortedPIDs := tss.SortPartyIDs(partyIDs)
+	return keys, sortedPIDs, nil
+}
+
+func SaveCertificates(cert []byte, name string) {
+	certFileName := makeTestCertFilePath(name)
+
+	fi, err := os.Stat(certFileName)
+	if !(err == nil && fi != nil && !fi.IsDir()) {
+		fd, err := os.OpenFile(certFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			common.Logger.Errorf("unable to open certificate file %s for writing", certFileName)
+		}
+		_, err = fd.Write(cert)
+		if err != nil {
+			common.Logger.Fatalf("unable to write to certificate file %s", certFileName)
+		}
+		common.Logger.Infof("Saved a certificate file for CA %s: ", name)
+	} else {
+		common.Logger.Infof("Certificate file already exists for CA %s; not re-creating: %s", name, certFileName)
+	}
+}
+
+func IsEmptyDir(name string) (bool, error) {
+	entries, err := ioutil.ReadDir(name)
+	if err != nil {
+		return false, err
+	}
+	return len(entries) == 0, nil
+}
+
+func LoadCertificate(name string) *x509.Certificate {
+	certFileName := makeTestCertFilePath(name)
+
+	certPEM, err := ioutil.ReadFile(certFileName)
+	if err != nil {
+		fmt.Printf("Cant read file %s: %s", certFileName, err)
+		return nil
+	}
+
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		fmt.Printf("failed to parse certificate PEM")
+		return nil
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		fmt.Printf("failed to parse certificate: " + err.Error())
+		return nil
+	}
+	return cert
 }
