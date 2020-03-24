@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tss-lib-test/cert"
-	"github.com/tss-lib-test/utils"
+	"github.com/seemenkina/tss-lib-test/cert"
+	"github.com/seemenkina/tss-lib-test/utils"
 )
 
 func main() {

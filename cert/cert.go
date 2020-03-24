@@ -14,8 +14,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/tss-lib-test/keygen"
-	"github.com/tss-lib-test/sign"
+	"github.com/seemenkina/tss-lib-test/keygen"
+	"github.com/seemenkina/tss-lib-test/sign"
 )
 
 type PrivateKeyCert struct {

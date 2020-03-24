@@ -12,7 +12,7 @@ import (
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
 
-	"github.com/tss-lib-test/utils"
+	"github.com/seemenkina/tss-lib-test/utils"
 )
 
 func NewSigning(msg *big.Int) common.SignatureData {
