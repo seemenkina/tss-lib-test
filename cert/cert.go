@@ -22,13 +22,8 @@ type PrivateKeyCert struct {
 	pk *ecdsa.PublicKey
 }
 
-type ecdsaSignature struct {
-	R, S *big.Int
-}
-
 func GenerateKey() PrivateKeyCert {
 	key := keygen.GenerateKeys()
-
 	pks := PrivateKeyCert{}
 	ecdsaPk := ecdsa.PublicKey{
 		Curve: elliptic.P256(),
@@ -47,16 +42,21 @@ func (p *PrivateKeyCert) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 	msg := new(big.Int)
 	msg.SetBytes(digest)
 
-	sign := sign.NewSigning(msg)
+	signatureData := sign.NewSigning(msg)
 	R := new(big.Int)
-	R.SetBytes(sign.R)
+	R.SetBytes(signatureData.R)
 	S := new(big.Int)
-	S.SetBytes(sign.S)
+	S.SetBytes(signatureData.S)
+
 	return asn1.Marshal(ecdsaSignature{R, S})
 }
 
-func generateCA(temp, parent *x509.Certificate, pubKey interface{}, rootKey interface{}) (*x509.Certificate, []byte, error) {
-	certBytes, err := x509.CreateCertificate(rand.Reader, temp, parent, pubKey, rootKey)
+type ecdsaSignature struct {
+	R, S *big.Int
+}
+
+func generateCA(temp, parent *x509.Certificate, pubKey interface{}, rootPrivateKey interface{}) (*x509.Certificate, []byte, error) {
+	certBytes, err := x509.CreateCertificate(rand.Reader, temp, parent, pubKey, rootPrivateKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Failed to create certificate: %s\n", err)
 	}
@@ -130,6 +130,35 @@ func Verify(rootCert, interCert *x509.Certificate) {
 
 	if _, err := interCert.Verify(opts); err != nil {
 		fmt.Println("failed to verify certificate: " + err.Error())
+		return
 	}
 	fmt.Println("Success Verify certificate")
+}
+
+func VerifyPEM(rootCert, interCert []byte) {
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(rootCert)
+
+	block, _ := pem.Decode([]byte(interCert))
+	if block == nil {
+		fmt.Println("failed to parse certificate PEM")
+		return
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		fmt.Println("failed to parse certificate: " + err.Error())
+		return
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: x509.NewCertPool(),
+	}
+
+	if _, err := cert.Verify(opts); err != nil {
+		fmt.Println("failed to verify certificate: " + err.Error())
+		return
+	}
+
+	fmt.Println("verification succeeds")
 }
