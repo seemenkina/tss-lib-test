@@ -11,7 +11,6 @@ import (
 	"github.com/binance-chain/tss-lib/ecdsa/signing"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
-
 	"github.com/seemenkina/tss-lib-test/utils"
 )
 
@@ -80,8 +79,7 @@ signing:
 			}
 
 		case save := <-endCh:
-			atomic.AddInt32(&ended, 1)
-			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
+			if atomic.AddInt32(&ended, 1) == int32(len(signPIDs)) {
 				common.Logger.Infof("Done. Received save data from %d participants", ended)
 				output = save
 				break signing

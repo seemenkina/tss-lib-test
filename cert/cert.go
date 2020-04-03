@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -16,10 +15,12 @@ import (
 
 	"github.com/seemenkina/tss-lib-test/keygen"
 	"github.com/seemenkina/tss-lib-test/sign"
+	"golang.org/x/crypto/cryptobyte"
+	"golang.org/x/crypto/cryptobyte/asn1"
 )
 
 type PrivateKeyCert struct {
-	pk *ecdsa.PublicKey
+	pk ecdsa.PublicKey
 }
 
 func GenerateKey() PrivateKeyCert {
@@ -30,29 +31,31 @@ func GenerateKey() PrivateKeyCert {
 		X:     key.ECDSAPub.X(),
 		Y:     key.ECDSAPub.Y(),
 	}
-	pks.pk = &ecdsaPk
+	pks.pk = ecdsaPk
 	return pks
 }
 
 func (p *PrivateKeyCert) Public() crypto.PublicKey {
-	return p.pk
+	return &p.pk
 }
 
 func (p *PrivateKeyCert) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	msg := new(big.Int)
+	msg := &big.Int{}
 	msg.SetBytes(digest)
 
 	signatureData := sign.NewSigning(msg)
-	R := new(big.Int)
-	R.SetBytes(signatureData.R)
-	S := new(big.Int)
-	S.SetBytes(signatureData.S)
+	R := &big.Int{}
+	R.SetBytes(signatureData.GetR())
+	S := &big.Int{}
+	S.SetBytes(signatureData.GetS())
 
-	return asn1.Marshal(ecdsaSignature{R, S})
-}
+	var b cryptobyte.Builder
+	b.AddASN1(asn1.SEQUENCE, func(b *cryptobyte.Builder) {
+		b.AddASN1BigInt(R)
+		b.AddASN1BigInt(S)
+	})
 
-type ecdsaSignature struct {
-	R, S *big.Int
+	return b.Bytes()
 }
 
 func generateCA(temp, parent *x509.Certificate, pubKey interface{}, rootPrivateKey interface{}) (*x509.Certificate, []byte, error) {
@@ -92,7 +95,7 @@ func GenRootCA(key PrivateKeyCert) (*x509.Certificate, []byte, error) {
 		MaxPathLen:            1,
 	}
 
-	return generateCA(&rootTemp, &rootTemp, key.pk, &key)
+	return generateCA(&rootTemp, &rootTemp, &key.pk, &key)
 }
 
 func GenerateCA(RootCA *x509.Certificate, keyRoot PrivateKeyCert) (*x509.Certificate, []byte, error) {

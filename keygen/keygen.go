@@ -25,6 +25,8 @@ func GenerateKeys() keygen.LocalPartySaveData {
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		pIDs = tss.GenerateTestPartyIDs(utils.TestParticipants)
+	} else {
+		return fixtures[0]
 	}
 
 	// pIDs := tss.GenerateTestPartyIDs(utils.TestParticipants)
