@@ -2,16 +2,24 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"sync"
 
+	"github.com/hashicorp/hcl"
 	"github.com/spiffe/spire/pkg/agent/plugin/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
+	"github.com/spiffe/spire/proto/spire/common"
 	spi "github.com/spiffe/spire/proto/spire/common/plugin"
 )
 
 const (
 	pluginName = "tss"
 )
+
+type ChallengePrototype struct {
+}
 
 func BuiltIn() catalog.Plugin {
 	return builtin(New())
@@ -37,14 +45,76 @@ func New() *TssPlugin {
 	return &TssPlugin{}
 }
 
-func (t *TssPlugin) FetchAttestationData(nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
-	panic("implement me")
+func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
+
+	// TODO: Create Attestation Data
+
+	// send the attestation data back to the agent
+	if err := stream.Send(&nodeattestor.FetchAttestationDataResponse{
+		AttestationData: &common.AttestationData{
+			Type: pluginName,
+			Data: nil,
+		},
+	}); err != nil {
+		return fmt.Errorf("tssPlugin: failed to send attestation data: %v", err)
+	}
+
+	// receive challenge
+	resp, err := stream.Recv()
+	if err != nil {
+		return fmt.Errorf("tssPlugin: failed to receive challenge: %v", err)
+	}
+
+	challenge := new(ChallengePrototype)
+	if err := json.Unmarshal(resp.Challenge, challenge); err != nil {
+		return fmt.Errorf("x509pop: unable to unmarshal challenge: %v", err)
+	}
+
+	// TODO: calculate and send the challenge response
+
+	var response []byte // it should be struct
+
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("tssPlugin: unable to marshal challenge response: %v", err)
+	}
+
+	if err := stream.Send(&nodeattestor.FetchAttestationDataResponse{
+		Response: responseBytes,
+	}); err != nil {
+		return fmt.Errorf("tssPlugin: unable to send challenge response: %v", err)
+	}
+
+	return nil
+
 }
 
-func (t *TssPlugin) Configure(context.Context, *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
-	panic("implement me")
+func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*spi.ConfigureResponse, error) {
+	config := new(TssConfig)
+	if err := hcl.Decode(config, req.Configuration); err != nil {
+		return nil, fmt.Errorf("tssPlugin: unable to decode configuration: %v", err)
+	}
+
+	if req.GlobalConfig == nil {
+		return nil, errors.New("tssPlugin: global configuration is required")
+	}
+	if req.GlobalConfig.TrustDomain == "" {
+		return nil, errors.New("tssPlugin: trust_domain is required")
+	}
+	config.trustDomain = req.GlobalConfig.TrustDomain
+
+	t.c = config
+
+	return &spi.ConfigureResponse{}, nil
 }
 
 func (t *TssPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*spi.GetPluginInfoResponse, error) {
 	return &spi.GetPluginInfoResponse{}, nil
+}
+
+func main() {
+	p := New()
+	catalog.PluginMain(
+		catalog.MakePlugin(pluginName, nodeattestor.PluginServer(p)),
+	)
 }
