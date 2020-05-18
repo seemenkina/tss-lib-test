@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	pluginName = "tss"
+	pluginName = "tss-node-attestor"
 )
 
-type ChallengePrototype struct {
+type ChallengeResponse struct {
+	Nonce []byte
 }
 
 func BuiltIn() catalog.Plugin {
@@ -47,7 +48,7 @@ func New() *TssPlugin {
 
 func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
 
-	// TODO: Create Attestation Data
+	// TODO: Create Attestation Data: Cert
 
 	// send the attestation data back to the agent
 	if err := stream.Send(&nodeattestor.FetchAttestationDataResponse{
@@ -65,7 +66,7 @@ func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchA
 		return fmt.Errorf("tssPlugin: failed to receive challenge: %v", err)
 	}
 
-	challenge := new(ChallengePrototype)
+	challenge := new(ChallengeResponse)
 	if err := json.Unmarshal(resp.Challenge, challenge); err != nil {
 		return fmt.Errorf("x509pop: unable to unmarshal challenge: %v", err)
 	}
