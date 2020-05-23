@@ -20,11 +20,13 @@ import (
 )
 
 type PrivateKeyCert struct {
-	pk ecdsa.PublicKey
+	pk           ecdsa.PublicKey
+	threshold    int
+	participants int
 }
 
-func GenerateKey() PrivateKeyCert {
-	key := keygen.GenerateKeys()
+func GenerateKey(th, part int) PrivateKeyCert {
+	key := keygen.GenerateKeys(th, part)
 	pks := PrivateKeyCert{}
 	ecdsaPk := ecdsa.PublicKey{
 		Curve: elliptic.P256(),

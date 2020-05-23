@@ -31,6 +31,38 @@ const (
 	testCertFileFormat    = "certificate_%s.pem"
 )
 
+type DirectoryFormats struct {
+	fixtureDirFormat string
+	certDirFormat    string
+}
+
+func (df *DirectoryFormats) SetDirFormats(fixture, cert string) {
+	df.certDirFormat = cert
+	df.fixtureDirFormat = fixture
+}
+
+type FileFormats struct {
+	fixtureFileFormat string
+	certFileFormat    string
+}
+
+func (df *FileFormats) SetFileFormats(fixture, cert string) {
+	df.certFileFormat = cert
+	df.fixtureFileFormat = fixture
+}
+
+type Settings struct {
+	participants int
+	threshold    int
+	dirs         DirectoryFormats
+	files        FileFormats
+}
+
+func (s *Settings) SetSettings(parts, tsh int) {
+	s.participants = parts
+	s.threshold = tsh
+}
+
 func SetUp(level string) {
 	if err := log.SetLogLevel("tss-lib", level); err != nil {
 		panic(err)
@@ -172,24 +204,19 @@ func IsEmptyDir(name string) (bool, error) {
 	return len(entries) == 0, nil
 }
 
-func LoadCertificate(name string) *x509.Certificate {
-	certFileName := makeTestCertFilePath(name)
-
+func LoadCertificate(certFileName string) (*x509.Certificate, error) {
 	certPEM, err := ioutil.ReadFile(certFileName)
 	if err != nil {
-		fmt.Printf("Cant read file %s: %s", certFileName, err)
-		return nil
+		return nil, fmt.Errorf("can't read file %s: %s", certFileName, err)
 	}
 
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		fmt.Printf("failed to parse certificate PEM")
-		return nil
+		return nil, fmt.Errorf("failed to parse certificate PEM")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		fmt.Printf("failed to parse certificate: " + err.Error())
-		return nil
+		return nil, fmt.Errorf("failed to parse certificate: " + err.Error())
 	}
-	return cert
+	return cert, nil
 }

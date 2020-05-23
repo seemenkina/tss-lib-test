@@ -14,22 +14,22 @@ import (
 	"github.com/seemenkina/tss-lib-test/utils"
 )
 
-func GenerateKeys() keygen.LocalPartySaveData {
+func GenerateKeys(th, part int) keygen.LocalPartySaveData {
 	utils.SetUp("info")
 	tss.SetCurve(elliptic.P256())
 
-	threshold := utils.TestThreshold
+	threshold := th
 	var output keygen.LocalPartySaveData
 
-	fixtures, pIDs, err := utils.LoadKeygenTest(utils.TestParticipants)
+	fixtures, pIDs, err := utils.LoadKeygenTest(part)
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
-		pIDs = tss.GenerateTestPartyIDs(utils.TestParticipants)
+		pIDs = tss.GenerateTestPartyIDs(part)
 	} else {
 		return fixtures[0]
 	}
 
-	// pIDs := tss.GenerateTestPartyIDs(utils.TestParticipants)
+	// pIDs := tss.GenerateTestPartyIDs(th)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	parties := make([]*keygen.LocalParty, 0, len(pIDs))
 

@@ -36,8 +36,8 @@ type TssConfig struct {
 }
 
 type TssPlugin struct {
-	m sync.Mutex
-	c *TssConfig
+	m      sync.Mutex
+	config *TssConfig
 }
 
 func New() *TssPlugin {
@@ -45,7 +45,7 @@ func New() *TssPlugin {
 }
 
 func (t *TssPlugin) Attest(stream nodeattestor.NodeAttestor_AttestServer) error {
-	if t.c == nil {
+	if t.config == nil {
 		return errors.New("tssPlugin: plugin not configured")
 	}
 
@@ -113,7 +113,7 @@ func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*
 	}
 	config.trustDomain = req.GlobalConfig.TrustDomain
 
-	t.c = config
+	t.config = config
 
 	return &spi.ConfigureResponse{}, nil
 }

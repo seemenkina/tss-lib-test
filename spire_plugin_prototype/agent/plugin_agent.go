@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/hashicorp/hcl"
+	"github.com/seemenkina/tss-lib-test/utils"
 	"github.com/spiffe/spire/pkg/agent/plugin/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -34,7 +36,10 @@ func builtin(p *TssPlugin) catalog.Plugin {
 }
 
 type TssConfig struct {
-	trustDomain string
+	trustDomain           string
+	x509CertificatePath   string
+	x509CACertificatePath string
+	ecdsaKeyGenDataPath   string
 }
 
 type TssPlugin struct {
@@ -49,6 +54,12 @@ func New() *TssPlugin {
 func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
 
 	// TODO: Create Attestation Data: Cert
+	// Нужен в конфиге путь до созданного сертификата + путь до root CA(если нет его, то видимо отказ)
+	// Плюс нужен путь где хранить часть ключа
+	// Если все пусто, то генерим
+
+	configData := t.c
+	key, cert := loadData(configData)
 
 	// send the attestation data back to the agent
 	if err := stream.Send(&nodeattestor.FetchAttestationDataResponse{
@@ -72,6 +83,7 @@ func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchA
 	}
 
 	// TODO: calculate and send the challenge response
+	// Генерим свой nonce + server nonce и подписываем ключем
 
 	var response []byte // it should be struct
 
@@ -104,6 +116,10 @@ func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*
 	}
 	config.trustDomain = req.GlobalConfig.TrustDomain
 
+	if config.x509CACertificatePath == "" {
+		return nil, errors.New("tssPlugin: path to root CA required")
+	}
+
 	t.c = config
 
 	return &spi.ConfigureResponse{}, nil
@@ -111,6 +127,19 @@ func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*
 
 func (t *TssPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*spi.GetPluginInfoResponse, error) {
 	return &spi.GetPluginInfoResponse{}, nil
+}
+
+func loadData(config *TssConfig) ([]byte, []byte) {
+
+	fi, err := os.Stat(config.x509CACertificatePath)
+	if err != nil && fi == nil {
+		// create new
+	} else {
+		cert, err := utils.LoadCertificate(config.x509CACertificatePath)
+		if err != nil {
+			return nil, nil
+		}
+	}
 }
 
 func main() {

@@ -12,7 +12,7 @@ import (
 
 func main() {
 
-	pks := cert.GenerateKey()
+	pks := cert.GenerateKey(utils.TestThreshold, utils.TestParticipants)
 
 	_, callerFileName, _, _ := runtime.Caller(0)
 	srcDirName := filepath.Dir(callerFileName)
@@ -35,10 +35,10 @@ func main() {
 		cert.Verify(rootCert, interCert)
 		// cert.VerifyPEM(rootCertPEM, certPEM)
 	} else {
-		rootCert := utils.LoadCertificate("Root_CA")
-		interCert := utils.LoadCertificate("Intermediate_CA")
+		// rootCert,_ := utils.LoadCertificate("Root_CA")
+		// interCert,_ := utils.LoadCertificate("Intermediate_CA")
 
-		cert.Verify(rootCert, interCert)
+		// cert.Verify(rootCert, interCert)
 	}
 
 }
