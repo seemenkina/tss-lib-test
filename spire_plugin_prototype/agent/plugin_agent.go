@@ -5,24 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/hcl"
+	"github.com/seemenkina/tss-lib-test/spire_plugin_prototype/plugin"
 	"github.com/seemenkina/tss-lib-test/utils"
 	"github.com/spiffe/spire/pkg/agent/plugin/nodeattestor"
 	"github.com/spiffe/spire/pkg/common/catalog"
+	"github.com/spiffe/spire/pkg/common/plugin/x509pop"
 	"github.com/spiffe/spire/proto/spire/common"
 	spi "github.com/spiffe/spire/proto/spire/common/plugin"
 )
 
 const (
-	pluginName = "tss-node-attestor"
+	pluginName = "tss-nodeattestor"
 )
-
-type ChallengeResponse struct {
-	Nonce []byte
-}
 
 func BuiltIn() catalog.Plugin {
 	return builtin(New())
@@ -36,15 +34,14 @@ func builtin(p *TssPlugin) catalog.Plugin {
 }
 
 type TssConfig struct {
-	trustDomain           string
-	x509CertificatePath   string
-	x509CACertificatePath string
-	ecdsaKeyGenDataPath   string
+	trustDomain               string
+	x509CertificatePath       string
+	x509IntermediatesCertPath string
 }
 
 type TssPlugin struct {
-	m sync.Mutex
-	c *TssConfig
+	m      sync.Mutex
+	config *TssConfig
 }
 
 func New() *TssPlugin {
@@ -52,21 +49,14 @@ func New() *TssPlugin {
 }
 
 func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchAttestationDataServer) error {
-
-	// TODO: Create Attestation Data: Cert
-	// Нужен в конфиге путь до созданного сертификата + путь до root CA(если нет его, то видимо отказ)
-	// Плюс нужен путь где хранить часть ключа
-	// Если все пусто, то генерим
-
-	configData := t.c
-	key, cert := loadData(configData)
+	attestData, err := t.loadConfigData()
+	if err != nil {
+		return err
+	}
 
 	// send the attestation data back to the agent
 	if err := stream.Send(&nodeattestor.FetchAttestationDataResponse{
-		AttestationData: &common.AttestationData{
-			Type: pluginName,
-			Data: nil,
-		},
+		AttestationData: attestData,
 	}); err != nil {
 		return fmt.Errorf("tssPlugin: failed to send attestation data: %v", err)
 	}
@@ -77,15 +67,16 @@ func (t *TssPlugin) FetchAttestationData(stream nodeattestor.NodeAttestor_FetchA
 		return fmt.Errorf("tssPlugin: failed to receive challenge: %v", err)
 	}
 
-	challenge := new(ChallengeResponse)
+	challenge := new(plugin.ECDSASignatureChallenge)
 	if err := json.Unmarshal(resp.Challenge, challenge); err != nil {
 		return fmt.Errorf("x509pop: unable to unmarshal challenge: %v", err)
 	}
 
-	// TODO: calculate and send the challenge response
-	// Генерим свой nonce + server nonce и подписываем ключем
-
-	var response []byte // it should be struct
+	// calculate and send the challenge response
+	response, err := plugin.CalculateResponse(challenge)
+	if err != nil {
+		return fmt.Errorf("x509pop: failed to calculate challenge response: %v", err)
+	}
 
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
@@ -116,11 +107,20 @@ func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*
 	}
 	config.trustDomain = req.GlobalConfig.TrustDomain
 
-	if config.x509CACertificatePath == "" {
-		return nil, errors.New("tssPlugin: path to root CA required")
+	if config.x509IntermediatesCertPath == "" {
+		return nil, errors.New("tssPlugin: path to intermediate certificates required")
 	}
 
-	t.c = config
+	if config.x509CertificatePath == "" {
+		return nil, errors.New("tssPlugin: path to certificate required")
+	}
+
+	// make sure the configuration produces valid data
+	if _, err := loadData(config); err != nil {
+		return nil, err
+	}
+
+	t.setConfiguration(config)
 
 	return &spi.ConfigureResponse{}, nil
 }
@@ -129,22 +129,63 @@ func (t *TssPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*
 	return &spi.GetPluginInfoResponse{}, nil
 }
 
-func loadData(config *TssConfig) ([]byte, []byte) {
-
-	fi, err := os.Stat(config.x509CACertificatePath)
-	if err != nil && fi == nil {
-		// create new
-	} else {
-		cert, err := utils.LoadCertificate(config.x509CACertificatePath)
-		if err != nil {
-			return nil, nil
-		}
-	}
-}
-
 func main() {
 	p := New()
 	catalog.PluginMain(
 		catalog.MakePlugin(pluginName, nodeattestor.PluginServer(p)),
 	)
+}
+
+func (t *TssPlugin) getConfiguration() *TssConfig {
+	t.m.Lock()
+	defer t.m.Unlock()
+	return t.config
+}
+
+func (t *TssPlugin) setConfiguration(c *TssConfig) {
+	t.m.Lock()
+	defer t.m.Unlock()
+	t.config = c
+}
+
+func (t *TssPlugin) loadConfigData() (*common.AttestationData, error) {
+	config := t.getConfiguration()
+	if config == nil {
+		return nil, errors.New("tssPlugin: not configured")
+	}
+	return loadData(config)
+}
+
+func loadData(config *TssConfig) (*common.AttestationData, error) {
+	leafCert, err := utils.LoadLeafCertificate(config.x509CertificatePath)
+	if err != nil {
+		return nil, fmt.Errorf("tssPlugin: unable to load leaf certificate %s: ", err)
+	}
+
+	var certificates [][]byte
+	certificates = append(certificates, leafCert.Raw)
+
+	// Append intermediate certificates if IntermediatesPath is set.
+	if strings.TrimSpace(config.x509IntermediatesCertPath) != "" {
+		intermediates, err := utils.LoadCertificates(config.x509IntermediatesCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("tssPlugin: unable to load intermediate certificates: %v", err)
+		}
+
+		for _, interCert := range intermediates {
+			certificates = append(certificates, interCert.Raw)
+		}
+	}
+
+	attestationDataBytes, err := json.Marshal(x509pop.AttestationData{
+		Certificates: certificates,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tssPlugin: unable to marshal attestation data: %v", err)
+	}
+
+	return &common.AttestationData{
+		Type: pluginName,
+		Data: attestationDataBytes,
+	}, nil
 }
