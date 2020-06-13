@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"context"
@@ -10,16 +10,17 @@ import (
 	"text/template"
 
 	"github.com/hashicorp/hcl"
-	"github.com/seemenkina/tss-lib-test/spire_plugin_prototype/plugin"
-	"github.com/seemenkina/tss-lib-test/utils"
+	"github.com/seemenkina/tss-lib-test/tssInterface"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/server/plugin/nodeattestor"
 	"github.com/spiffe/spire/proto/spire/common"
 	spi "github.com/spiffe/spire/proto/spire/common/plugin"
+
+	"github.com/seemenkina/tss-lib-test/plugin"
 )
 
 const (
-	pluginName = "tss-nodeattestor"
+	pluginName = "tssNodeattestor"
 )
 
 func BuiltIn() catalog.Plugin {
@@ -152,7 +153,7 @@ func (t *TssPlugin) Configure(ctx context.Context, req *spi.ConfigureRequest) (*
 		return nil, errors.New("tssPlugin: trust_domain is required")
 	}
 
-	trustBundle, err := utils.LoadCertPool(config.CABundlePath)
+	trustBundle, err := tssInterface.LoadCertPool(config.CABundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load trust bundle: %v", err)
 	}
@@ -179,6 +180,13 @@ func (*TssPlugin) GetPluginInfo(context.Context, *spi.GetPluginInfoRequest) (*sp
 	return &spi.GetPluginInfoResponse{}, nil
 }
 
+func main() {
+	p := New()
+	catalog.PluginMain(
+		catalog.MakePlugin(pluginName, nodeattestor.PluginServer(p)),
+	)
+}
+
 func (t *TssPlugin) getConfiguration() *TssConfig {
 	t.m.Lock()
 	defer t.m.Unlock()
@@ -196,7 +204,7 @@ func buildSelectors(leaf *x509.Certificate, chains [][]*x509.Certificate) []*com
 
 	if leaf.Subject.CommonName != "" {
 		selectors = append(selectors, &common.Selector{
-			Type: "tssPlugin", Value: "subject:cn:" + leaf.Subject.CommonName,
+			Type: pluginName, Value: "subject:cn:" + leaf.Subject.CommonName,
 		})
 	}
 
@@ -214,7 +222,7 @@ func buildSelectors(leaf *x509.Certificate, chains [][]*x509.Certificate) []*com
 			fingerprints[fp] = cert
 
 			selectors = append(selectors, &common.Selector{
-				Type: "tss-nodeattestor", Value: "ca:fingerprint:" + fp,
+				Type: pluginName, Value: "ca:fingerprint:" + fp,
 			})
 		}
 	}

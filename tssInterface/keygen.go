@@ -1,4 +1,4 @@
-package keygen
+package tssInterface
 
 import (
 	"crypto/elliptic"
@@ -10,18 +10,16 @@ import (
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
-
-	"github.com/seemenkina/tss-lib-test/utils"
 )
 
-func GenerateKeys(th, part int) keygen.LocalPartySaveData {
-	utils.SetUp("info")
+func GenerateKeys(th, part int, id string) keygen.LocalPartySaveData {
+	SetUp("info")
 	tss.SetCurve(elliptic.P256())
 
 	threshold := th
 	var output keygen.LocalPartySaveData
 
-	fixtures, pIDs, err := utils.LoadKeygenTest(part)
+	fixtures, pIDs, err := LoadKeygenTest(part, id)
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		pIDs = tss.GenerateTestPartyIDs(part)
@@ -29,7 +27,7 @@ func GenerateKeys(th, part int) keygen.LocalPartySaveData {
 		return fixtures[0]
 	}
 
-	// pIDs := tss.GenerateTestPartyIDs(th)
+	// pIDs := tssInterface.GenerateTestPartyIDs(th)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	parties := make([]*keygen.LocalParty, 0, len(pIDs))
 
@@ -93,7 +91,7 @@ keygen:
 			if err != nil {
 				common.Logger.Errorf("should not be an error getting a party's index from save data: %s", err)
 			}
-			utils.TryWriteTestFixtureFile(index, save)
+			TryWriteTestFixtureFile(index, save, id)
 
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(pIDs)) {

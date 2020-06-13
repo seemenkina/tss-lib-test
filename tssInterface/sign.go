@@ -1,4 +1,4 @@
-package sign
+package tssInterface
 
 import (
 	"crypto/elliptic"
@@ -11,22 +11,21 @@ import (
 	"github.com/binance-chain/tss-lib/ecdsa/signing"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
-	"github.com/seemenkina/tss-lib-test/utils"
 )
 
-func NewSigning(msg *big.Int) common.SignatureData {
-	utils.SetUp("info")
+func NewSigning(msg *big.Int, thr, part int, id string) common.SignatureData {
+	SetUp("info")
 	tss.SetCurve(elliptic.P256())
 
-	threshold := utils.TestThreshold
+	threshold := thr
 	var output common.SignatureData
 
 	// PHASE: load keygen fixtures
-	keys, signPIDs, err := utils.LoadData(utils.TestThreshold+1, utils.TestParticipants)
+	keys, signPIDs, err := LoadData(threshold+1, part, id)
 	if err != nil {
 		common.Logger.Errorf("should load keygen fixtures, %s", err)
 	}
-	if utils.TestThreshold+1 != len(keys) && utils.TestThreshold+1 != len(signPIDs) {
+	if threshold+1 != len(keys) && threshold+1 != len(signPIDs) {
 		common.Logger.Errorf("should be equal")
 	}
 

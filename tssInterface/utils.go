@@ -1,11 +1,14 @@
-package utils
+package tssInterface
 
 import (
+	"crypto/sha1"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -19,49 +22,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	TestParticipants = 2
-	TestThreshold    = 1
-)
+// const (
+// 	TestParticipants = 2
+// 	TestThreshold    = 1
+// )
 
 const (
-	testFixtureDirFormat  = "%s/../test_data/ecdsa_data"
-	TestCertDirFormat     = "%s/../test_data/cert"
+	testFixtureDirFormat  = "%s/../data/agent_%s/ecdsa_data"
+	testCertDirFormat     = "%s/../data/agent_%s/cert"
 	testFixtureFileFormat = "keygen_data_%d.json"
 	testCertFileFormat    = "certificate_%s.pem"
 )
-
-type DirectoryFormats struct {
-	fixtureDirFormat string
-	certDirFormat    string
-}
-
-func (df *DirectoryFormats) SetDirFormats(fixture, cert string) {
-	df.certDirFormat = cert
-	df.fixtureDirFormat = fixture
-}
-
-type FileFormats struct {
-	fixtureFileFormat string
-	certFileFormat    string
-}
-
-func (df *FileFormats) SetFileFormats(fixture, cert string) {
-	df.certFileFormat = cert
-	df.fixtureFileFormat = fixture
-}
-
-type Settings struct {
-	participants int
-	threshold    int
-	dirs         DirectoryFormats
-	files        FileFormats
-}
-
-func (s *Settings) SetSettings(parts, tsh int) {
-	s.participants = parts
-	s.threshold = tsh
-}
 
 func SetUp(level string) {
 	if err := log.SetLogLevel("tss-lib", level); err != nil {
@@ -69,22 +40,35 @@ func SetUp(level string) {
 	}
 }
 
-func makeTestFixtureFilePath(partyIndex int) string {
+func CreateUserDir(id string) {
 	_, callerFileName, _, _ := runtime.Caller(0)
 	srcDirName := filepath.Dir(callerFileName)
-	fixtureDirName := fmt.Sprintf(testFixtureDirFormat, srcDirName)
+	userDirName := fmt.Sprintf("%s/../data/agent_%s/ecdsa_data", srcDirName, id)
+	if _, err := os.Stat(userDirName); os.IsNotExist(err) {
+		_ = os.MkdirAll(userDirName, 0700)
+	}
+	userDirName2 := fmt.Sprintf("%s/../data/agent_%s/cert", srcDirName, id)
+	if _, err := os.Stat(userDirName2); os.IsNotExist(err) {
+		_ = os.MkdirAll(userDirName2, 0700)
+	}
+}
+
+func makeTestFixtureFilePath(partyIndex int, id string) string {
+	_, callerFileName, _, _ := runtime.Caller(0)
+	srcDirName := filepath.Dir(callerFileName)
+	fixtureDirName := fmt.Sprintf(testFixtureDirFormat, srcDirName, id)
 	return fmt.Sprintf("%s/"+testFixtureFileFormat, fixtureDirName, partyIndex)
 }
 
-func makeTestCertFilePath(name string) string {
+func makeTestCertFilePath(name string, id string) string {
 	_, callerFileName, _, _ := runtime.Caller(0)
 	srcDirName := filepath.Dir(callerFileName)
-	certDirName := fmt.Sprintf(TestCertDirFormat, srcDirName)
+	certDirName := fmt.Sprintf(testCertDirFormat, srcDirName, id)
 	return fmt.Sprintf("%s/"+testCertFileFormat, certDirName, name)
 }
 
-func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData) {
-	fixtureFileName := makeTestFixtureFilePath(index)
+func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData, id string) {
+	fixtureFileName := makeTestFixtureFilePath(index, id)
 
 	// fixture file does not already exist?
 	// if it does, we won't re-create it here
@@ -108,7 +92,7 @@ func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData) {
 	}
 }
 
-func LoadData(qty, fixtureCount int) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
+func LoadData(qty, fixtureCount int, id string) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
 	keys := make([]keygen.LocalPartySaveData, 0, qty)
 	plucked := make(map[int]interface{}, qty)
 	for i := 0; len(plucked) < qty; i = (i + 1) % fixtureCount {
@@ -118,7 +102,7 @@ func LoadData(qty, fixtureCount int) ([]keygen.LocalPartySaveData, tss.SortedPar
 		}
 	}
 	for i := range plucked {
-		fixtureFilePath := makeTestFixtureFilePath(i)
+		fixtureFilePath := makeTestFixtureFilePath(i, id)
 		bz, err := ioutil.ReadFile(fixtureFilePath)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
@@ -146,14 +130,14 @@ func LoadData(qty, fixtureCount int) ([]keygen.LocalPartySaveData, tss.SortedPar
 	return keys, sortedPIDs, nil
 }
 
-func LoadKeygenTest(qty int, optionalStart ...int) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
+func LoadKeygenTest(qty int, id string, optionalStart ...int) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
 	keys := make([]keygen.LocalPartySaveData, 0, qty)
 	start := 0
 	if 0 < len(optionalStart) {
 		start = optionalStart[0]
 	}
 	for i := start; i < qty; i++ {
-		fixtureFilePath := makeTestFixtureFilePath(i)
+		fixtureFilePath := makeTestFixtureFilePath(i, id)
 		bz, err := ioutil.ReadFile(fixtureFilePath)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
@@ -177,8 +161,8 @@ func LoadKeygenTest(qty int, optionalStart ...int) ([]keygen.LocalPartySaveData,
 	return keys, sortedPIDs, nil
 }
 
-func SaveCertificates(cert []byte, name string) {
-	certFileName := makeTestCertFilePath(name)
+func SaveCertificates(cert []byte, name string, id string) {
+	certFileName := makeTestCertFilePath(name, id)
 
 	fi, err := os.Stat(certFileName)
 	if !(err == nil && fi != nil && !fi.IsDir()) {
@@ -204,7 +188,8 @@ func IsEmptyDir(name string) (bool, error) {
 	return len(entries) == 0, nil
 }
 
-func LoadCertificate(certFileName string) (*x509.Certificate, error) {
+// LoadLeafCertificate loads leaf certificate into an *x509.Certificate from  a PEM file on disk.
+func LoadLeafCertificate(certFileName string) (*x509.Certificate, error) {
 	certPEM, err := ioutil.ReadFile(certFileName)
 	if err != nil {
 		return nil, fmt.Errorf("can't read file %s: %s", certFileName, err)
@@ -219,4 +204,70 @@ func LoadCertificate(certFileName string) (*x509.Certificate, error) {
 		return nil, fmt.Errorf("failed to parse certificate: " + err.Error())
 	}
 	return cert, nil
+}
+
+// LoadCertificates loads one or more certificates into an []*x509.Certificate from a PEM file on disk.
+func LoadCertificates(path string) ([]*x509.Certificate, error) {
+	rest, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var certs []*x509.Certificate
+	for blockno := 0; ; blockno++ {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse certificate in block %d: %v", blockno, err)
+		}
+		certs = append(certs, cert)
+	}
+
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no certificates found in file")
+	}
+
+	return certs, nil
+}
+
+// NewCertPool creates a new *x509.CertPool based on the certificates given
+// as parameters.
+func NewCertPool(certs ...*x509.Certificate) *x509.CertPool {
+	certPool := x509.NewCertPool()
+	for _, cert := range certs {
+		certPool.AddCert(cert)
+	}
+	return certPool
+}
+
+// LoadCertPool loads one or more certificates into an *x509.CertPool from
+// a PEM file on disk.
+func LoadCertPool(path string) (*x509.CertPool, error) {
+	certs, err := LoadCertificates(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewCertPool(certs...), nil
+}
+
+func CalculateIdHash(id *big.Int) string {
+	sum := sha1.Sum(id.Bytes())
+	return hex.EncodeToString(sum[:])
+}
+
+func GenerateRandId() *big.Int {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil
+	}
+	var bigI big.Int
+	return bigI.SetBytes(b)
 }

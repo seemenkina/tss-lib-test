@@ -7,6 +7,7 @@ require (
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
+	github.com/hashicorp/hcl v1.0.1-0.20190430135223-99e2f22d1c94
 	github.com/ipfs/go-log v1.0.4
 	github.com/ipfs/go-log/v2 v2.0.8 // indirect
 	github.com/pkg/errors v0.9.1
