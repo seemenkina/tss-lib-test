@@ -8,7 +8,6 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
-	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -35,7 +34,7 @@ func GenerateKeys(th, part int, id string) keygen.LocalPartySaveData {
 	outCh := make(chan tss.Message, len(pIDs))
 	endCh := make(chan keygen.LocalPartySaveData, len(pIDs))
 
-	updater := test.SharedPartyUpdater
+	updater := SharedPartyUpdater
 
 	startGR := runtime.NumGoroutine()
 

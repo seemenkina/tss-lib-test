@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"sort"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/ipfs/go-log"
@@ -67,7 +66,7 @@ func makeTestCertFilePath(name string, id string) string {
 	return fmt.Sprintf("%s/"+testCertFileFormat, certDirName, name)
 }
 
-func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData, id string) {
+func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData, id string) error {
 	fixtureFileName := makeTestFixtureFilePath(index, id)
 
 	// fixture file does not already exist?
@@ -76,20 +75,21 @@ func TryWriteTestFixtureFile(index int, data keygen.LocalPartySaveData, id strin
 	if !(err == nil && fi != nil && !fi.IsDir()) {
 		fd, err := os.OpenFile(fixtureFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
-			common.Logger.Errorf("unable to open fixture file %s for writing", fixtureFileName)
+			return fmt.Errorf("unable to open fixture file %s for writing", fixtureFileName)
 		}
 		bz, err := json.Marshal(&data)
 		if err != nil {
-			common.Logger.Fatalf("unable to marshal save data for fixture file %s", fixtureFileName)
+			return fmt.Errorf("unable to marshal save data for fixture file %s", fixtureFileName)
 		}
 		_, err = fd.Write(bz)
 		if err != nil {
-			common.Logger.Fatalf("unable to write to fixture file %s", fixtureFileName)
+			return fmt.Errorf("unable to write to fixture file %s", fixtureFileName)
 		}
-		common.Logger.Infof("Saved a test fixture file for party %d: %s", index, fixtureFileName)
+		fmt.Printf("Saved a test fixture file for party %d: %s", index, fixtureFileName)
 	} else {
-		common.Logger.Infof("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
+		fmt.Printf("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
 	}
+	return nil
 }
 
 func LoadData(qty, fixtureCount int, id string) ([]keygen.LocalPartySaveData, tss.SortedPartyIDs, error) {
@@ -161,23 +161,24 @@ func LoadKeygenTest(qty int, id string, optionalStart ...int) ([]keygen.LocalPar
 	return keys, sortedPIDs, nil
 }
 
-func SaveCertificates(cert []byte, name string, id string) {
+func SaveCertificates(cert []byte, name string, id string) error {
 	certFileName := makeTestCertFilePath(name, id)
 
 	fi, err := os.Stat(certFileName)
 	if !(err == nil && fi != nil && !fi.IsDir()) {
 		fd, err := os.OpenFile(certFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
-			common.Logger.Errorf("unable to open certificate file %s for writing", certFileName)
+			return fmt.Errorf("unable to open certificate file %s for writing", certFileName)
 		}
 		_, err = fd.Write(cert)
 		if err != nil {
-			common.Logger.Fatalf("unable to write to certificate file %s", certFileName)
+			return fmt.Errorf("unable to write to certificate file %s", certFileName)
 		}
-		common.Logger.Infof("Saved a certificate file for CA %s ", name)
+		fmt.Printf("Saved a certificate file for CA %s ", name)
 	} else {
-		common.Logger.Infof("Certificate file already exists for CA %s; not re-creating: %s", name, certFileName)
+		fmt.Printf("Certificate file already exists for CA %s; not re-creating: %s", name, certFileName)
 	}
+	return nil
 }
 
 func IsEmptyDir(name string) (bool, error) {
